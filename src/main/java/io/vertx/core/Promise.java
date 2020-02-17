@@ -13,7 +13,9 @@ package io.vertx.core;
 import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.impl.NoStackTraceThrowable;
+import io.vertx.core.impl.VertxInternal;
 
 import static io.vertx.core.Future.factory;
 
@@ -39,6 +41,32 @@ public interface Promise<T> extends Handler<AsyncResult<T>> {
   static <T> Promise<T> promise() {
     return factory.promise();
   }
+
+  static <T> Promise<T> promiseSingleThread()
+  {
+    return factory.promiseSingleThread();
+  }
+
+  static <T> Promise<T> promiseSingleThread(T result, Throwable error)
+  {
+    return factory.promiseSingleThread(result, error);
+  }
+
+  static <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx, Handler<AsyncResult<T>> handler)
+  {
+    return factory.promiseLockedOneHandler(vertx, handler);
+  }
+
+  static <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx, Handler<AsyncResult<T>> handler, long timeout)
+  {
+    return factory.promiseLockedOneHandler(vertx, handler, timeout);
+  }
+
+  static <T> Promise<T> futureNormal(VertxInternal vertx)
+  {
+    return factory.futureNormal(vertx);
+  }
+
 
   /**
    * Succeed or fail this promise with the {@link AsyncResult} event.

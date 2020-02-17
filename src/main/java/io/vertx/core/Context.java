@@ -19,6 +19,8 @@ import io.vertx.core.impl.VertxThread;
 import io.vertx.core.json.JsonObject;
 
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 /**
  * The execution context of a {@link io.vertx.core.Handler} execution.
@@ -98,6 +100,34 @@ public interface Context {
    * @param action  the action to run
    */
   void runOnContext(Handler<Void> action);
+
+
+  /**
+   *
+   * the runOnContext push its action each time to an internal queue
+   * but it would be faster if we have additionaly a method which dont push
+   * each time to that queue, but only in cases where it is necessary
+   *
+   * for example: we call the method runOnContextButDon.... from an another context but from the same
+   * eventloop, so we only have to change the context, but dont have to change from eventloop A
+   * to eventloop A
+   *
+   * maybe we should change runOnContext to behave like this, and add a
+   * pushAndRunOnContext that forces each time the push, like the runOnContext we acutally have
+   *
+   * runOnContext -> pushRunOnContext
+   * runOnContextButDon.... -> runOnContext
+   *
+   *
+   */
+  //Todo remove default
+  default void runOnContextButDontPushToMpscQueueIfNotNeccessery(Handler<Void> action)
+  {
+    //TODO implement
+  }
+
+
+
 
   /**
    * Safely execute some blocking code.
@@ -277,5 +307,20 @@ public interface Context {
 
   @GenIgnore(GenIgnore.PERMITTED_TYPE)
   boolean removeCloseHook(Closeable hook);
+
+  public boolean checkCtxtEquality();
+
+  public <T> Future<T> runAndGetFuture(boolean equalityCheck, Supplier<T> runnableWithReturn);
+
+  public <T> Future<T> runAndGetFuture(boolean equalityCheck, boolean isFastFutureAllowed, Handler<Promise<T>> runnable);
+
+  public <T> void run(boolean equalityCheck, Runnable ressourceRunner);
+
+  public <T> void run(boolean equalityCheck, boolean isFastFutureAllowed, Handler<Promise<T>> ressourceRunner, Handler<AsyncResult<T>> callerRunner);
+
+  public <T> void run(boolean equalityCheck, Supplier<T> ressourceRunner, Handler<AsyncResult<T>> callerRunner);
+
+  public <T> void run(boolean equalityCheck, Supplier<T> ressourceRunner, BiConsumer<T, Throwable> callerRunner);
+
 
 }

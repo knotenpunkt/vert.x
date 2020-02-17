@@ -18,6 +18,8 @@ import io.vertx.core.impl.launcher.VertxCommandLauncher;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 import static io.vertx.core.impl.VertxThread.DISABLE_TCCL;
 
@@ -329,4 +331,315 @@ abstract class AbstractContext implements ContextInternal {
       });
     }
   }
+
+  @Override
+  public boolean checkCtxtEquality()
+  {
+    return this == this.owner().getOrCreateContext();
+  }
+
+  /**
+   * runnAbleWithReturn muss einen Rueckgabewert haben, der im Falle der direkten Ausfuehrung
+   * dann direkt an ein succeeded/failed Future weitergegeben wird
+   * <p>
+   * bei async-ausfuehrung bzw. bei equalityCheck=false wird ein an context bounded promise/future zurueckgegeben
+   */
+  @Override
+  public <T> Future<T> runAndGetFuture(boolean equalityCheck, Supplier<T> runnableWithReturn)
+  {
+
+    ContextInternal callerContextS = owner().getOrCreateContext();
+
+    if (equalityCheck && callerContextS == this)
+    {
+      try
+      {
+        return Future.succeededFuture(runnableWithReturn.get());
+      }
+      catch (Throwable t)
+      {
+        return Future.failedFuture(t);
+      }
+    }
+
+    PromiseInternal<T> promise = callerContextS.promise();
+    this.runOnContext(h ->
+    {
+      try
+      {
+        promise.complete(runnableWithReturn.get());//complete is executed on the callerContext, cause of context binding to promise
+      }
+      catch (Throwable t)
+      {
+        promise.tryFail(t);
+      }
+    });
+
+    return promise.future();
+  }
+
+
+  /**
+   * runnable erhaelt ein Promise. Dieses muss bei isFastFutureAllowed=true hierbei vor Methodenende completed oder failed/exceptioniert worden sein
+   * Denn in diesem Fall kann bei direkter Ausfuehrung ein FastFuture zurueckgegeben werden
+   * Bei isFastFutureAllowed=false wird ein normales context bounded promise/future zurueckgegeben.
+   * <p>
+   * <p>
+   * bei async-ausfuehrung bzw. bei equalityCheck=false wird immer ein an context bounded promise/future zurueckgegeben
+   */
+  @Override
+  public <T> Future<T> runAndGetFuture(boolean equalityCheck, boolean isFastFutureAllowed, Handler<Promise<T>> runnable)
+  {
+    ContextInternal callerContextS = owner().getOrCreateContext();
+
+    if (equalityCheck && callerContextS == this)
+    {
+      //callerContext binding deshalb, weil wenn das promise weitergereicht wird, dass dann sichergestellt wird,
+      //dass bei der rueckgabe das promise im richtigen context aufgerufen wird
+      Promise<T> promiseFast = (isFastFutureAllowed) ? Promise.promiseSingleThread(/*callerContextS*/) : callerContextS.promise();
+
+      try
+      {
+        runnable.handle(promiseFast);
+        //da es die gleichen threads sind -> callerContext==ressourceContext
+      }
+      catch (Throwable t)
+      {
+        promiseFast.tryFail(t);
+      }
+      return promiseFast.future();
+    }
+
+    PromiseInternal<T> promise = callerContextS.promise();
+    this.runOnContext(h ->
+    {
+      try
+      {
+        runnable.handle(promise);
+        //complete is executed on the callerContext, cause of context binding to promise
+      }
+      catch (Throwable t)
+      {
+        promise.tryFail(t);
+      }
+    });
+
+    return promise.future();
+  }
+
+
+  private ContextInternal getCallerContextOrNullS()
+  {
+    ContextInternal callerContext = this.owner().getOrCreateContext();
+    return (callerContext == this) ? null : callerContext;
+  }
+
+
+  /**
+   * aehnlich zu runOnContext. prueft aber vorab noch (bei equalityCheck=true), ob ein context-switch ueberhaupt notwendig ist
+   */
+  @Override
+  public <T> void run(boolean equalityCheck, Runnable ressourceRunner)
+  {
+    ContextInternal callerContext = getCallerContextOrNullS();
+
+    if (equalityCheck && callerContext == null)
+    {
+      try
+      {
+        ressourceRunner.run();
+      }
+      catch (Exception e)
+      {
+        callerContext.reportException(e);
+      }
+      return;
+    }
+
+    this.runOnContext(h ->
+    {
+      ressourceRunner.run();
+    });
+  }
+
+
+
+  /**
+   * ressourceRunner erhaelt ein Promise. Dieses muss bei isFastFutureAllowed=true hierbei vor Methodenende completed oder failed/exceptioniert worden sein
+   * Denn in diesem Fall kann bei direkter Ausfuehrung ein FastFuture verwendet
+   * Bei isFastFutureAllowed=false wird ein normales context bounded promise/future verwendet.
+   * <p>
+   * Im Falle der direkten Ausfuehrung wird entsprechendes future oder fastFuture direkt an callerRunner uebergeben
+   * <p>
+   * Im Falle der asynchronen Ausfuehrung wird ebenso entweder ein FastFuture oder normales Future verwendet, das auch direkt an callerRunner uebergeben wird
+   */
+  @Override
+  public <T> void run(boolean equalityCheck, boolean isFastFutureAllowed, Handler<Promise<T>> ressourceRunner, Handler<AsyncResult<T>> callerRunner)
+  {
+    ContextInternal callerContextS = owner().getOrCreateContext();
+
+    if (equalityCheck && callerContextS == this)
+    {
+      //callerContext binding deshalb, weil wenn das promise weitergereicht wird, dass dann sichergestellt wird,
+      //dass bei der rueckgabe das promise im richtigen context aufgerufen wird
+      Promise<T> promiseFast = (isFastFutureAllowed) ? Promise.promiseSingleThread(/*callerContextS*/) : callerContextS.promise();
+      try
+      {
+        ressourceRunner.handle(promiseFast);
+      }
+      catch (Throwable t)
+      {
+        promiseFast.tryFail(t);
+      }
+      this.runHelper(isFastFutureAllowed, promiseFast, callerRunner);
+      return;
+    }
+
+    this.runOnContext(h ->
+    {
+      //callerContext binding deshalb, weil wenn das promise weitergereicht wird, dass dann sichergestellt wird,
+      //dass bei der rueckgabe das promise im richtigen context aufgerufen wird
+      Promise<T> promiseFast = (isFastFutureAllowed) ? Promise.promiseSingleThread(/*callerContextS*/) : callerContextS.promise();
+      try
+      {
+        ressourceRunner.handle(promiseFast); //nur hier duerfte ne exception fliegen
+        callerContextS.runOnContext(h2 ->
+        {
+          this.runHelper(isFastFutureAllowed, promiseFast, callerRunner);
+        });
+      }
+      catch (Throwable t)
+      {
+        promiseFast.tryFail(t);
+        callerContextS.runOnContext(h2 ->
+        {
+          this.runHelper(isFastFutureAllowed, promiseFast, callerRunner);
+        });
+      }
+    });
+  }
+
+  /**
+   * helper for runS: entscheidet ob das future direkt an asyncresult uebergeben werden darf, oder ob es mit onComplete (hier setHandler) auf das Ergebnis warten muss
+   */
+  private <T> void runHelper(boolean isFastFutureAllowed, Promise<T> promiseFast, Handler<AsyncResult<T>> callerRunner)
+  {
+    if (isFastFutureAllowed)
+    {
+      //direct call
+      callerRunner.handle(promiseFast.future());
+    }
+    else
+    {
+      //wait on complete call
+      promiseFast.future().setHandler(callerRunner);
+    }
+  }
+
+
+  /**
+   * ressourceRunner muss ein Rueckgabewert haben, der dann direkt an ein Succeded im Falle einer Exception an ein Failed Future weitergeben wird.
+   * Dieses wiederum wird dann sofort dem callerRunner uebergeben
+   */
+  @Override
+  public <T> void run(boolean equalityCheck, Supplier<T> ressourceRunner, Handler<AsyncResult<T>> callerRunner)
+  {
+    ContextInternal callerContextS = owner().getOrCreateContext();
+
+    if (equalityCheck && callerContextS == this)
+    {
+      Future<T> tmp;
+      try
+      {
+        tmp = Future.succeededFuture(ressourceRunner.get());
+      }
+      catch (Throwable t)
+      {
+        tmp = Future.failedFuture(t);
+      }
+
+      callerRunner.handle(tmp);
+      return;
+    }
+
+
+    this.runOnContext(h ->
+    {
+      try
+      {
+        T back = ressourceRunner.get(); //nur hier duerfte ne exception fliegen
+        callerContextS.runOnContext(h2 ->
+        {
+          Future<T> tmp = Future.succeededFuture(back);
+          callerRunner.handle(tmp);
+        });
+      }
+      catch (Throwable t)
+      {
+        callerContextS.runOnContext(h2 ->
+        {
+          Future<T> tmp = Future.failedFuture(t);
+          callerRunner.handle(tmp);
+        });
+      }
+    });
+  }
+
+
+  /**
+   * RessourceRunner muss einen Rueckgabewert haben, das im dann direkt im BiConsumer callerRunner landet, das zweite Argument steht fuer error und ist in diesem Fall null
+   * Sollte der RessourceRunner eine Exception werfen so ist das erste Argument null und error enthaelt/erhaelt die Exception
+   */
+  @Override
+  public <T> void run(boolean equalityCheck, Supplier<T> ressourceRunner, BiConsumer<T, Throwable> callerRunner)
+  {
+    ContextInternal callerContextS = owner().getOrCreateContext();
+
+    if (equalityCheck && callerContextS == this)
+    {
+      Throwable error = null;
+      T result = null;
+      try
+      {
+        result = ressourceRunner.get();
+      }
+      catch (Exception e)
+      {
+        result = null;
+        error = e;
+      }
+
+      try
+      {
+        callerRunner.accept(result, error);
+      }
+      catch (Throwable t)
+      {
+        callerContextS.reportException(t);
+      }
+
+      return;
+    }
+
+    this.runOnContext(h ->
+    {
+      try
+      {
+        T back = ressourceRunner.get(); //nur hier duerfte ne exception fliegen
+        callerContextS.runOnContext(h2 ->
+        {
+          callerRunner.accept(back, null);
+        });
+      }
+      catch (Exception e)
+      {
+        callerContextS.runOnContext(h2 ->
+        {
+          callerRunner.accept(null, e);
+        });
+      }
+    });
+  }
+
+
 }

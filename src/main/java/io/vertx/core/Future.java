@@ -14,7 +14,10 @@ package io.vertx.core;
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.FastFutureFamily.FutureLockedMultiHandler;
+import io.vertx.core.FastFutureFamily.LockedFuture;
 import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.spi.FutureFactory;
 
 import java.util.concurrent.CompletableFuture;
@@ -94,6 +97,29 @@ public interface Future<T> extends AsyncResult<T> {
     return factory.failureFuture(failureMessage);
   }
 
+
+  static FutureBoolean createFastFutureBoolean(boolean data)
+  {
+    return factory.createFastFutureBoolean(data);
+  }
+
+  static FutureBoolean createSlowFutureBoolean(Future<Boolean> data)
+  {
+    return factory.createSlowFutureBoolean(data);
+  }
+
+  static FutureBoolean createSlowFutureBoolean(Promise<Boolean> data)
+  {
+    return factory.createSlowFutureBoolean(data);
+  }
+
+  static <T> LockedFuture<T> futureLockedMultiHandler(VertxInternal vertx)
+  {
+    return factory.futureLockedMultiHandler(vertx);
+  }
+
+
+
   /**
    * Has the future completed?
    * <p>
@@ -119,6 +145,21 @@ public interface Future<T> extends AsyncResult<T> {
    */
   @Fluent
   Future<T> onComplete(Handler<AsyncResult<T>> handler);
+
+  /**
+   *
+   * the same as onComplete(handler), but here with a timeout option.
+   * The future is automatically failed after that timeout if in the meantime is no result calculated
+   *
+   * @param handler
+   * @return
+   */
+  @Fluent
+  default Future<T> onComplete(Handler<AsyncResult<T>> handler, long timeout)
+  {
+    throw new RuntimeException("is here not implemented");
+  }
+
 
   /**
    * Add a handler to be notified of the succeeded result.

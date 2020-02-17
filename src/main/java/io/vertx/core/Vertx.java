@@ -13,6 +13,7 @@ package io.vertx.core;
 
 import io.netty.channel.EventLoopGroup;
 import io.vertx.codegen.annotations.*;
+import io.vertx.core.FastFutureFamily.LockedFuture;
 import io.vertx.core.datagram.DatagramSocket;
 import io.vertx.core.datagram.DatagramSocketOptions;
 import io.vertx.core.dns.DnsClient;
@@ -25,6 +26,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.impl.VertxFactory;
+import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.impl.resolver.DnsResolverProvider;
 import io.vertx.core.metrics.Measured;
 import io.vertx.core.net.NetClient;
@@ -38,6 +40,8 @@ import io.vertx.core.streams.ReadStream;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+
+import static io.vertx.core.Future.factory;
 
 /**
  * The entry point into the Vert.x Core API.
@@ -623,4 +627,34 @@ public interface Vertx extends Measured {
    */
   @GenIgnore
   @Nullable Handler<Throwable> exceptionHandler();
+
+
+   <T> Future<T> succeededFuture();
+
+   <T> Future<T> succeededFuture(T result);
+
+   <T> Future<T> failedFuture(Throwable t);
+
+   <T> Future<T> failedFuture(String failureMessage);
+
+   FutureBoolean createFastFutureBoolean(boolean data);
+
+   FutureBoolean createSlowFutureBoolean(Future<Boolean> data);
+
+   FutureBoolean createSlowFutureBoolean(Promise<Boolean> data);
+
+   <T> LockedFuture<T> futureLockedMultiHandler();
+
+   <T> Promise<T> promiseSingleThread();
+
+   <T> Promise<T> promiseSingleThread(T result, Throwable error);
+
+   <T> Promise<T> promiseLockedOneHandler(Handler<AsyncResult<T>> handler);
+
+   <T> Promise<T> promiseLockedOneHandler(Handler<AsyncResult<T>> handler, long timeout);
+
+   <T> Promise<T> futureNormal();
+
+
+
 }

@@ -17,6 +17,7 @@ import io.netty.resolver.AddressResolverGroup;
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.vertx.codegen.annotations.Nullable;
+import io.vertx.core.FastFutureFamily.LockedFuture;
 import io.vertx.core.Future;
 import io.vertx.core.*;
 import io.vertx.core.datagram.DatagramSocket;
@@ -1093,6 +1094,106 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
   @Override
   public Handler<Throwable> exceptionHandler() {
     return exceptionHandler;
+  }
+
+  @Override
+  public <T> Future<T> succeededFuture()
+  {
+    return Future.succeededFuture();
+  }
+
+  @Override
+  public <T> Future<T> succeededFuture(T result)
+  {
+    return Future.succeededFuture(result);
+  }
+
+  @Override
+  public <T> Future<T> failedFuture(Throwable t)
+  {
+    return Future.failedFuture(t);
+  }
+
+  @Override
+  public <T> Future<T> failedFuture(String failureMessage)
+  {
+    return Future.failedFuture(failureMessage);
+  }
+
+  @Override
+  public FutureBoolean createFastFutureBoolean(boolean data)
+  {
+    return Future.createFastFutureBoolean(data);
+  }
+
+  @Override
+  public FutureBoolean createSlowFutureBoolean(Future<Boolean> data)
+  {
+    return Future.createSlowFutureBoolean(data);
+  }
+
+  @Override
+  public FutureBoolean createSlowFutureBoolean(Promise<Boolean> data)
+  {
+    return Future.createSlowFutureBoolean(data);
+  }
+
+  /**
+   *
+   * here i push THIS as vertx instance
+   *
+   * @param <T>
+   * @return
+   */
+  @Override
+  public <T> LockedFuture<T> futureLockedMultiHandler()
+  {
+    return Future.futureLockedMultiHandler(this);
+  }
+
+  @Override
+  public <T> Promise<T> promiseSingleThread()
+  {
+    return Promise.promiseSingleThread();
+  }
+
+  @Override
+  public <T> Promise<T> promiseSingleThread(T result, Throwable error)
+  {
+    return Promise.promiseSingleThread(result, error);
+  }
+
+  /**
+   *
+   * here i push THIS as vertx instance
+   *
+   */
+  @Override
+  public <T> Promise<T> promiseLockedOneHandler(Handler<AsyncResult<T>> handler)
+  {
+    return Promise.promiseLockedOneHandler(this, handler);
+  }
+
+  /**
+   *
+   * here i push THIS as vertx instance
+   *
+   */
+  @Override
+  public <T> Promise<T> promiseLockedOneHandler(Handler<AsyncResult<T>> handler, long timeout)
+  {
+    return Promise.promiseLockedOneHandler(this, handler, timeout);
+  }
+
+  /**
+   *
+   * here i push THIS as vertx instance
+   *
+   */
+  @Override
+  public <T> Promise<T> futureNormal()
+  {
+    return Promise.futureNormal(this);
   }
 
   @Override

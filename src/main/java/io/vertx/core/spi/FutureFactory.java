@@ -11,14 +11,19 @@
 
 package io.vertx.core.spi;
 
-import io.vertx.core.Future;
+import io.vertx.core.*;
+import io.vertx.core.FastFutureFamily.*;
 import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.impl.PromiseInternal;
+import io.vertx.core.impl.VertxInternal;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public interface FutureFactory {
+
+
+  //FutureFactory setVertx(VertxInternal vertx);
 
   <T> PromiseInternal<T> promise();
 
@@ -39,5 +44,24 @@ public interface FutureFactory {
   <T> Future<T> failedFuture(ContextInternal context, Throwable t);
 
   <T> Future<T> failedFuture(ContextInternal context, String failureMessage);
+
+
+  <T> Promise<T> promiseSingleThread();
+
+  <T> Promise<T> promiseSingleThread(T result, Throwable error);
+
+  FutureBoolean createFastFutureBoolean(boolean data);
+
+  FutureBoolean createSlowFutureBoolean(Future<Boolean> data);
+
+  FutureBoolean createSlowFutureBoolean(Promise<Boolean> data);
+
+  <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx, Handler<AsyncResult<T>> handler);
+
+  <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx, Handler<AsyncResult<T>> handler, long timeout);
+
+  <T> LockedFuture<T> futureLockedMultiHandler(VertxInternal vertx);
+
+  <T> Promise<T> futureNormal(VertxInternal vertx);
 
 }

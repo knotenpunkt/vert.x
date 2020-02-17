@@ -28,12 +28,55 @@ import java.util.function.Function;
  */
 public interface AsyncResult<T> {
 
+  public static final int FAILURE_EXCEPTION = 0;
+  public static final int FAILURE_USER = 1;
+  public static final int FAILURE_TIMEOUT = 2;
+
+
+
   /**
    * The result of the operation. This will be null if the operation failed.
    *
    * @return the result or null if the operation failed.
    */
   T result();
+
+
+  /**
+   * The result of the operation. If there is a failure, the method throws an Exception
+   *
+   * @return the result or null if the operation failed.
+   */
+  default T resultOrException() throws Throwable
+  {
+
+    if(cause() !=null) throw cause();
+
+    return result();
+  }
+
+  //it should be overidden
+  default int getFailureType()
+  {
+    return FAILURE_USER;
+  }
+
+
+  default boolean isExceptionFailure()
+  {
+    return getFailureType() == FAILURE_EXCEPTION;
+  }
+
+  default boolean isUserFailure()
+  {
+    return getFailureType() == FAILURE_USER;
+  }
+
+  default boolean isTimeoutFailure()
+  {
+    return getFailureType() == FAILURE_TIMEOUT;
+  }
+
 
   /**
    * A Throwable describing failure. This will be null if the operation succeeded.

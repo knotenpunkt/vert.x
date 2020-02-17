@@ -11,7 +11,8 @@
 
 package io.vertx.core.impl;
 
-import io.vertx.core.Future;
+import io.vertx.core.*;
+import io.vertx.core.FastFutureFamily.*;
 import io.vertx.core.spi.FutureFactory;
 
 /**
@@ -20,6 +21,14 @@ import io.vertx.core.spi.FutureFactory;
 public class FutureFactoryImpl implements FutureFactory {
 
   private static final SucceededFuture EMPTY = new SucceededFuture<>(null, null);
+//  private VertxInternal vertx;
+
+//  @Override
+//  public FutureFactoryImpl setVertx(VertxInternal vertx)
+//  {
+//    this.vertx = vertx;
+//    return this;
+//  }
 
   @Override
   public <T> PromiseInternal<T> promise() {
@@ -72,4 +81,59 @@ public class FutureFactoryImpl implements FutureFactory {
   public <T> Future<T> failedFuture(ContextInternal context, String failureMessage) {
     return new FailedFuture<>(context, failureMessage);
   }
+
+  @Override
+  public <T> Promise<T> promiseSingleThread()
+  {
+    return new FutureSingleThread<T>();
+  }
+
+  @Override
+  public <T> Promise<T> promiseSingleThread(T result, Throwable error)
+  {
+    return new FutureSingleThread<T>(result, error);
+  }
+
+  @Override
+  public FutureBoolean createFastFutureBoolean(boolean data)
+  {
+    return new FutureBooleanImplFast(data);
+  }
+
+  @Override
+  public FutureBoolean createSlowFutureBoolean(Future<Boolean> data)
+  {
+    return new FutureBooleanImplSlow(data);
+  }
+  @Override
+  public FutureBoolean createSlowFutureBoolean(Promise<Boolean> data)
+  {
+    return new FutureBooleanImplSlow(data.future());
+  }
+
+  @Override
+  public <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx,Handler<AsyncResult<T>> handler)
+  {
+    return new FutureLockedOneHandler<T>(vertx, handler);
+  }
+
+  @Override
+  public <T> Promise<T> promiseLockedOneHandler(VertxInternal vertx, Handler<AsyncResult<T>> handler, long timeout)
+  {
+    return new FutureLockedOneHandler<T>(vertx, handler, timeout);
+  }
+
+  @Override
+  public <T> LockedFuture<T> futureLockedMultiHandler(VertxInternal vertx)
+  {
+    return new FutureLockedMultiHandler<>(vertx);
+  }
+
+  @Override
+  public <T> Promise<T> futureNormal(VertxInternal vertx)
+  {
+    return new FutureImplNormal<>(vertx);
+  }
+
+
 }

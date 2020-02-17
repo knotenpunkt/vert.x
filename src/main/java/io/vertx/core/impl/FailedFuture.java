@@ -50,8 +50,16 @@ public class FailedFuture<T> implements Future<T> {
     return true;
   }
 
+
+  /**
+   *
+   * the context here is not needed, cause the caller-context is the caller-context^^
+   * and the result is immedeatly given to the handler.
+   *
+   */
   @Override
   public Future<T> onComplete(Handler<AsyncResult<T>> handler) {
+    //the context check here can be deleted, it only stays for now, here, cause of tests
     if (context != null) {
       context.dispatch(this, handler);
     } else {
@@ -59,6 +67,13 @@ public class FailedFuture<T> implements Future<T> {
     }
     return this;
   }
+
+  @Override
+  public Future<T> onComplete(Handler<AsyncResult<T>> handler, long timeout) {
+    //the result is there, we dont need to do more complex logic here
+    return onComplete(handler);
+  }
+
 
   @Override
   public Handler<AsyncResult<T>> getHandler() {

@@ -9,41 +9,36 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
  */
 
-package io.vertx.core.impl;
+package io.vertx.core.FastFutureFamily;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.impl.NoStackTraceThrowable;
+import io.vertx.core.impl.PromiseInternal;
+import io.vertx.core.impl.VertxInternal;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
-class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
+public class FutureImplNormal<T> implements PromiseInternal<T>, Future<T> {
 
-  private final ContextInternal context;
+  private final VertxInternal vertx;
   private boolean failed;
   private boolean succeeded;
-  private Handler<AsyncResult<T>> handler;
+  //private HandlerWithContext<T> handlerWithContext; //Todo that we can use for the first handler, the list after the first handler (creation and adding)
+  private final List<HandlerWithContext<T>> handlerWithContextList= new ArrayList<HandlerWithContext<T>>();
   private T result;
   private Throwable throwable;
 
   /**
    * Create a future that hasn't completed yet
    */
-  FutureImpl() {
-    this(null);
-  }
-
-
-  /**
-   * Create a future that hasn't completed yet
-   */
-  FutureImpl(ContextInternal context) {
-    this.context = context;
-  }
-
-  public ContextInternal context() {
-    return context;
+  public FutureImplNormal(VertxInternal vertx)
+  {
+    this.vertx = vertx;
   }
 
   /**
@@ -84,61 +79,57 @@ class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
   @Override
   public Future<T> onComplete(Handler<AsyncResult<T>> h) {
     Objects.requireNonNull(h, "No null handler accepted");
+
     if (!isComplete())
     {
+      HandlerWithContext<T> handlerWithContext = new HandlerWithContext<>(h, vertx.getOrCreateContext());
+
+
       synchronized (this)
       {
         if (!isComplete())
         {
-          if (handler == null)
-          {
-            handler = h;
-          }
-          else
-          {
-            addHandler(h);
-          }
+          handlerWithContextList.add(handlerWithContext);
           return this;
         }
       }
     }
-    dispatch(h);
+    vertx.getOrCreateContext().dispatch(this,h);
     return this;
   }
 
-  private void addHandler(Handler<AsyncResult<T>> h) {
-    Handlers<T> handlers;
-    if (handler instanceof Handlers) {
-      handlers = (Handlers<T>) handler;
-    } else {
-      handlers = new Handlers<>();
-      handlers.add(handler);
-      handler = handlers;
-    }
-    handlers.add(h);
-  }
+  @Override
+  public Future<T> onComplete(Handler<AsyncResult<T>> h, long timeout)
+  {
+    Objects.requireNonNull(h, "No null handler accepted");
 
-  protected void dispatch(Handler<AsyncResult<T>> handler) {
-    if (handler instanceof Handlers) {
-      for (Handler<AsyncResult<T>> h : (Handlers<T>)handler) {
-        doDispatch(h);
+    if (!isComplete())
+    {
+      ContextInternal callerContext = vertx.getOrCreateContext();
+      TimeoutWrapperHandler<T> timeoutWrapperHandler = new TimeoutWrapperHandler<>(h, callerContext, 0);
+      HandlerWithContext<T> handlerWithContext = new HandlerWithContext<>(timeoutWrapperHandler, callerContext);
+
+      synchronized (this)
+      {
+        if (!isComplete())
+        {
+          handlerWithContextList.add(handlerWithContext);
+        }
       }
-    } else {
-      doDispatch(handler);
+      timeoutWrapperHandler.startTimeout(timeout);
+      return this;
     }
+    vertx.getOrCreateContext().dispatch(this,h);
+    return this;
   }
 
-  private void doDispatch(Handler<AsyncResult<T>> handler) {
-    if (context != null) {
-      context.dispatch(this, handler);
-    } else {
-      handler.handle(this);
-    }
-  }
+
+
+
 
   @Override
-  public synchronized Handler<AsyncResult<T>> getHandler() {
-    return handler;
+  public Handler<AsyncResult<T>> getHandler() {
+    return null;
   }
 
   @Override
@@ -150,15 +141,23 @@ class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
       }
       this.result = result;
       succeeded = true;
-      h = handler;
-      handler = null;
+//      h = handler;
+//      handler = null;
     }
-    if (h != null) {
-      dispatch(h);
+
+    //here at this moment the handlerList is not anymore manipulated, cause of succed=true
+    //-> no copy of the handler/handlerList is neccessary
+
+    for (HandlerWithContext<T> value : handlerWithContextList)
+    {
+      value.doDispatch(this);
     }
     return true;
   }
 
+  /**
+   * for what is that method for?
+   */
   public void handle(Future<T> ar) {
     if (ar.succeeded()) {
       complete(ar.result());
@@ -170,21 +169,23 @@ class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
   @Override
   public boolean tryFail(Throwable cause) {
     Handler<AsyncResult<T>> h;
-
-    Throwable causeTmp = cause != null ? cause : new NoStackTraceThrowable(null);
-
     synchronized (this) {
       if (succeeded || failed) {
         return false;
       }
-      this.throwable = causeTmp;
+      this.throwable = cause != null ? cause : new NoStackTraceThrowable(null);
       failed = true;
-      h = handler;
-      handler = null;
+//      h = handler;
+//      handler = null;
     }
-    if (h != null) {
-      dispatch(h);
+    //here at this moment the handlerList is not anymore manipulated, cause of succed=true
+    //-> no copy of the handler/handlerList is neccessary
+
+    for (HandlerWithContext<T> value : handlerWithContextList)
+    {
+      value.doDispatch(this);
     }
+
     return true;
   }
 
@@ -193,6 +194,13 @@ class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
     return this;
   }
 
+  /**
+   *
+   * for what is that method here for?
+   * could we use that also in my other futures? to be faster?
+   *
+   * @param future
+   */
   @Override
   public void operationComplete(io.netty.util.concurrent.Future<T> future) {
     if (future.isSuccess()) {
@@ -216,12 +224,4 @@ class FutureImpl<T> implements PromiseInternal<T>, Future<T> {
   }
 
 
-  private class Handlers<T> extends ArrayList<Handler<AsyncResult<T>>> implements Handler<AsyncResult<T>> {
-    @Override
-    public void handle(AsyncResult<T> res) {
-      for (Handler<AsyncResult<T>> handler : this) {
-        handler.handle(res);
-      }
-    }
-  }
 }
